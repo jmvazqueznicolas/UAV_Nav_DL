@@ -1,13 +1,15 @@
+# Librerias empleadas
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from djitellopy import tello
 import time
 import threading
+import pandas as pd
 
 # Variables globales
 
-T = 10              # Tiempo para hacer la trayectoria
 tiempo_flag = False # Se inicializa un tiempo de vuelo
 alt_des = 60        # Altura deseada
 alt_des1 = 60
@@ -15,38 +17,62 @@ vel_des = 0         # Velocidad deseada
 
 # Hilos para el control y la detección de grietas
 def control_vehiculo():
+    time.sleep(5)
     """En este hilo se tiene el control del vehículo"""
 
+    T = 20              # Tiempo para hacer la trayectoria
+    alt_ini = 70        # Altura inicial
+    alt_fin = 180       # Altura final
+    
+    # Se hace el cálculo de los coeficientes de la trayectoria
+    A = np.matrix([[0, 0, 0, 0, 0, 1], [T**5, T**4, T**3, T**2, T, 1], 
+                    [0, 0, 0, 0, 1, 0], [5*T**4, 4*T**3, 3*T**2, 2*T, 1, 0], 
+                    [0, 0, 0, 2, 0, 0], [20*T**3, 12*T**2, 6*T, 2, 0, 0]])
+    b = np.matrix([[alt_ini],[alt_fin],[0],
+                    [0], [0], [0]]) 
+    x = (A**-1)*b
+    print("Valores de x: ", x)
+    #time.sleep(50)
     # Despegue del vehículo
     drone.takeoff()
-
     print("La altura en el despegue es: ", drone.get_height())
-    time.sleep(1)
-    #drone.send_rc_control(0, 0, 25, 0)
-
+    time.sleep(3)
+   
     try:
         # Ganacias del controlador
-        PID = {"Kp":1.2, "Kd":1, "Ki":0.1} 
+        PID = {"Kp":1.4, "Kd":1, "Ki":0.1} 
         SM = {"rho":0.8, "lambda":0.5, "epsilon":0.5}
 
         var =  0
         data_error = []
         data_altura = []
         data_time = []
-        datos = {"error_alt":[], "alt_des":[], "alt_real":[]}
-
+        datos = {"error_alt":[], "alt_des":[], "alt_real":[], "vel_real":[], "tiempo":[]}
 
         time_interval = 0.005
+        
+        # Se toma el valor inicial del tiempo 
+        valor = 0
+        val_ini = time.perf_counter()
     
+        # Subir
         while True:
+            # Cálculo de la altura deseada
+            alt_des = (x.item(0)*valor**5 + x.item(1)*valor**4 
+            + x.item(2)*valor**3 + x.item(3)*valor**2 + x.item(4)*valor + x.item(5))
+            
             # Lectura de datos
             alt_real = drone.get_distance_tof()
             vel_real = drone.get_speed_z()
+
+            # Cálculo del error
             error = alt_des - alt_real
             error_vel = vel_des - vel_real
+
+            # Superficie de deslizamiento
             s = error_vel + SM["lambda"] * error
             
-            # Control PD de altura
+            # Control PD+SMC de altura
             u_pid = PID["Kp"]*error + PID["Kd"]*error_vel
             u_sm = SM["rho"]*np.tanh(s/SM["epsilon"]) + SM["lambda"]*vel_real
             u = int(np.clip( u_pid + u_sm, -100, 100))
@@ -56,28 +82,22 @@ def control_vehiculo():
             datos["error_alt"].append(error)
             datos["alt_des"].append(alt_des)
             datos["alt_real"].append(alt_real)
+            datos["tiempo"].append(valor)
+            datos["vel_real"].append(vel_real)
 
             #data_time.append()
             time.sleep(time_interval)
-            if tiempo_flag == True:
-                break
-            """
-            var += 1
-            if var == 500:
-                alt_des = 90
-                
-            if var == 1000:
-                alt_des = 100
-
-            if var == 1500:
-                alt_des = 130
+            val_fin = time.perf_counter()
+            valor = val_fin - val_ini
             
-            if var == 2000:
-                alt_des = 170
-
-            if var == 10000:
+            print("El valor es ", valor)
+            if valor >= 20:
                 break
-            """
+            
+        # Escribir valores en un archivo CSV
+        df = pd.DataFrame(datos) 
+        df.to_csv('datos.csv')
+        print("Se acabo el vuelo y ya esta el archivo csv")
         drone.land()
 
     except Exception as e:
@@ -85,17 +105,10 @@ def control_vehiculo():
         drone.land()
 
     # Se grafican los resultados
-    #plt.plot(data_altura)
-    #plt.show()
+    # plt.plot(data_altura)
+    # plt.show()
 
 def trayectoria():
-    # Se hace el cálculo de los coeficientes de la trayectoria
-    A = np.matrix([[0, 0, 0, 0, 0, 1], [T**5, T**4, T**3, T**2, T, 1], 
-                    [0, 0, 0, 0, 1, 0], [5*T**4, 4*T**3, 3*T**2, 2*T, 1, 0], 
-                    [0, 0, 0, 2, 0, 0], [20*T**3, 12*T**2, 6*T, 2, 0, 0]])
-    b = np.matrix([[60],[180],[0],
-                    [0], [0], [0]]) 
-    x = (A**-1)*b
     
     # Inicialización del tiempo y primera lectura 
     valor = 0
@@ -158,23 +171,20 @@ def draw_labels(boxes, confs, colors, class_ids, classes, img):
 			cv2.putText(img, label, (x, y - 5), font, 1, color, 1)
 	cv2.imshow("Image", img)
 
-trayec = threading.Thread(target=trayectoria)
-trayec.start()
+#trayec = threading.Thread(target=trayectoria)
+#trayec.start()
 
 if __name__ == '__main__':
 
     # Se instancia objeto para conectarse con el vehículo
     drone = tello.Tello()
     drone.connect()
-    time.sleep(10)
+    time.sleep(1)
 
     # Manejo de hilos
-    #control_veh = threading.Thread(target=control_vehiculo)
-    #trayec = threading.Thread(target=trayectoria)
-
+    control_veh = threading.Thread(target=control_vehiculo)
     #det_grietas = threading.Thread(target=deteccion_grietas)
-    #control_veh.start()
-    #trayec.start()
+    control_veh.start()
     #det_grietas.start()
 
     # Se carga el modelo YOLO entrenado
@@ -204,7 +214,7 @@ if __name__ == '__main__':
     """    
     
     while True:
-        print(alt_des1)
+        #print(alt_des1)
         frame = drone.get_frame_read().frame
         height, width, channels = frame.shape
         blob, outputs = detect_objects(frame, model, output_layers)
