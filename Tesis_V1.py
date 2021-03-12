@@ -37,11 +37,11 @@ def control_vehiculo():
     # Despegue del vehículo
     drone.takeoff()
     print("La altura en el despegue es: ", drone.get_height())
-    time.sleep(5)
+    time.sleep(2)
    
     try:
         # Ganacias del controlador
-        PID = {"Kp":1.4, "Kd":1, "Ki":0.1} 
+        PID = {"Kp":1.2, "Kd":0.8, "Ki":0.1} 
         SM = {"rho":0.8, "lambda":0.5, "epsilon":0.5}
 
         var =  0
@@ -54,8 +54,6 @@ def control_vehiculo():
 
         time_interval = 0.005
         
-        
-    
         # Subir
         for i in range(3):
             # Se toma el valor inicial del tiempo 
@@ -63,9 +61,9 @@ def control_vehiculo():
             tiempo_ini = time.perf_counter()
 
             if i==0:
-                x = gen_trayectoria(20, 70, 180)
+                x = gen_trayectoria(7, 70, 180)
             elif i==2:
-                x = gen_trayectoria(20, 180, 70)
+                x = gen_trayectoria(7, 180, 70)
             if i==0 or i==2:
                 while True:
                     # Cálculo de la altura y velocidad deseada
@@ -75,6 +73,7 @@ def control_vehiculo():
                     vel_des = (5*x.item(0)*tiempo**4 + 4*x.item(1)*tiempo**3 
                                 + 3*x.item(2)*tiempo**2 + 2*x.item(3)*tiempo 
                                 + x.item(4))
+                    vel_des = 0
 
                     # Lectura de datos
                     alt_real = drone.get_distance_tof()
@@ -110,11 +109,24 @@ def control_vehiculo():
                     val_fin = time.perf_counter()
                     tiempo = val_fin - tiempo_ini
                     
-                    print("El valor es ", tiempo)
-                    if tiempo >= 20:
+                    print("El valor es ", alt_real)
+                    if tiempo >= 7:
+                        if i==0:
+                            print("Acabo la trayectoria 1")
+                        elif i==2:
+                            print("Acabo la trayectoria 3")
                         break
-            #if i==1:
-            #    drone.send_rc_control(0, 0, u, 0)
+            if i==1:
+                while True:
+                    drone.send_rc_control(0, 10, 0, 0)
+                    time.sleep(time_interval)
+                    val_fin = time.perf_counter()
+                    tiempo = val_fin - tiempo_ini
+                    
+                    #print("El valor es ", tiempo)
+                    if tiempo >= 3:
+                        print("Acabo en la trayectoria 2")
+                        break
 
         # Escribir valores en un archivo CSV
         df = pd.DataFrame(datos)
@@ -130,29 +142,10 @@ def control_vehiculo():
     # plt.plot(data_altura)
     # plt.show()
 
-def trayectoria():
-    
-    # Inicialización del tiempo y primera lectura 
-    tiempo = 0
-    tiempo_ini = time.perf_counter()
-    while True:
-        #tiempo.append(tiempo)
-        alt_des = x.item(0)*tiempo**5 + x.item(1)*tiempo**4 + x.item(2)*tiempo**3 
-        + x.item(3)*tiempo**2 + x.item(4)*tiempo + x.item(5)
-        #pos_des.append(alt_des)
-        time.sleep(0.1)
-        val_fin = time.perf_counter()
-        tiempo = val_fin - tiempo_ini
-        print(alt_des)
-        if tiempo >= 100:
-            tiempo_flag = True
-            break
-
 def deteccion_grietas():
     while True:
         print('Grieta detectada')
         time.sleep(1)
-
 
 def detect_objects(img, net, outputLayers):			
     blob = cv2.dnn.blobFromImage(img, scalefactor=0.00392, size=(320, 320), mean=(0, 0, 0), swapRB=True, crop=False)
@@ -201,12 +194,13 @@ if __name__ == '__main__':
     # Se instancia objeto para conectarse con el vehículo
     drone = tello.Tello()
     drone.connect()
-    time.sleep(1)
-
-    # Manejo de hilos
-    control_veh = threading.Thread(target=control_vehiculo)
+    # Inicializa la transmición de video
+    drone.streamon()
+    # Manejo de hilo de control
+    #control_veh = threading.Thread(target=control_vehiculo)
+    #control_veh.start()
+    
     #det_grietas = threading.Thread(target=deteccion_grietas)
-    control_veh.start()
     #det_grietas.start()
 
     # Se carga el modelo YOLO entrenado
@@ -218,8 +212,6 @@ if __name__ == '__main__':
     output_layers = [layers_names[i[0]-1] for i in model.getUnconnectedOutLayers()]
     colors = np.random.uniform(0, 255, size=(len(classes), 3))
 	
-    # Inicializa la transmición de video
-    drone.streamon()
     """
         cap = start_webcam()
         while True:
@@ -233,7 +225,10 @@ if __name__ == '__main__':
                 break
         cap.release()
 
-    """    
+    """
+    # Se toma el valor inicial del tiempo 
+    tiempo = 0
+    tiempo_ini = time.perf_counter()    
     
     while True:
         #print(alt_des1)
@@ -242,11 +237,21 @@ if __name__ == '__main__':
         blob, outputs = detect_objects(frame, model, output_layers)
         boxes, confs, class_ids = get_box_dimensions(outputs, height, width)
         draw_labels(boxes, confs, colors, class_ids, classes, frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        
+        #time.sleep(time_interval)
+        val_fin = time.perf_counter()
+        tiempo = val_fin - tiempo_ini
+        print("El tiempo es:", tiempo)
+
+        if tiempo>30 or (cv2.waitKey(1) & 0xFF == ord('q')):
             print('Finalizo')
             #me.land()
             break
         cv2.destroyAllWindows()
+    # Se finaliza la comunicación con el drone
+    cv2.destroyAllWindows()
+    drone.streamoff()
+    drone.end()
     """
     while True:
         frame = drone.get_frame_read().frame
