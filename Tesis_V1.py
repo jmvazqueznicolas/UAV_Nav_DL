@@ -15,28 +15,29 @@ alt_des = 60        # Altura deseada
 alt_des1 = 60
 vel_des = 0         # Velocidad deseada 
 
-# Hilos para el control y la detección de grietas
-def control_vehiculo():
-    time.sleep(5)
-    """En este hilo se tiene el control del vehículo"""
+# Función para generar la trayectoria
+def gen_trayectoria(T, alt_ini, alt_fin):
+    """ T: tiempo para hacer la trayectoria
+        alt_ini: Altura inicial
+        alt_fin: Alruta final
+    """
 
-    T = 20              # Tiempo para hacer la trayectoria
-    alt_ini = 70        # Altura inicial
-    alt_fin = 180       # Altura final
-    
     # Se hace el cálculo de los coeficientes de la trayectoria
     A = np.matrix([[0, 0, 0, 0, 0, 1], [T**5, T**4, T**3, T**2, T, 1], 
                     [0, 0, 0, 0, 1, 0], [5*T**4, 4*T**3, 3*T**2, 2*T, 1, 0], 
                     [0, 0, 0, 2, 0, 0], [20*T**3, 12*T**2, 6*T, 2, 0, 0]])
     b = np.matrix([[alt_ini],[alt_fin],[0],
                     [0], [0], [0]]) 
-    x = (A**-1)*b
-    print("Valores de x: ", x)
-    #time.sleep(50)
+    return (A**-1)*b
+
+# Hilos para el control y la detección de grietas
+def control_vehiculo():
+    """En este hilo se tiene el control del vehículo"""
+
     # Despegue del vehículo
     drone.takeoff()
     print("La altura en el despegue es: ", drone.get_height())
-    time.sleep(3)
+    time.sleep(5)
    
     try:
         # Ganacias del controlador
@@ -47,59 +48,82 @@ def control_vehiculo():
         data_error = []
         data_altura = []
         data_time = []
-        datos = {"error_alt":[], "alt_des":[], "alt_real":[], "vel_real":[], "tiempo":[]}
+        datos = {"error_alt":[], "alt_des":[], "alt_real":[], 
+                 "vel_des":[],"vel_real":[], "tiempo":[], 
+                 "dic_estados":[]}
 
         time_interval = 0.005
         
-        # Se toma el valor inicial del tiempo 
-        valor = 0
-        val_ini = time.perf_counter()
+        
     
         # Subir
-        while True:
-            # Cálculo de la altura deseada
-            alt_des = (x.item(0)*valor**5 + x.item(1)*valor**4 
-            + x.item(2)*valor**3 + x.item(3)*valor**2 + x.item(4)*valor + x.item(5))
-            
-            # Lectura de datos
-            alt_real = drone.get_distance_tof()
-            vel_real = drone.get_speed_z()
+        for i in range(2):
+            # Se toma el valor inicial del tiempo 
+            tiempo = 0
+            tiempo_ini = time.perf_counter()
 
-            # Cálculo del error
-            error = alt_des - alt_real
-            error_vel = vel_des - vel_real
+            if i==0:
+                x = gen_trayectoria(20, 70, 180)
+            elif i==1:
+                x = gen_trayectoria(20, 180, 70)
+            if i==0 or i==1:
+                while True:
+                    # Cálculo de la altura y velocidad deseada
+                    alt_des = (x.item(0)*tiempo**5 + x.item(1)*tiempo**4 
+                                + x.item(2)*tiempo**3 + x.item(3)*tiempo**2 
+                                + x.item(4)*tiempo + x.item(5))
+                    vel_des = (5*x.item(0)*tiempo**4 + 4*x.item(1)*tiempo**3 
+                                + 3*x.item(2)*tiempo**2 + 2*x.item(3)*tiempo 
+                                + x.item(4))
 
-            # Superficie de deslizamiento
-            s = error_vel + SM["lambda"] * error
-            
-            # Control PD+SMC de altura
-            u_pid = PID["Kp"]*error + PID["Kd"]*error_vel
-            u_sm = SM["rho"]*np.tanh(s/SM["epsilon"]) + SM["lambda"]*vel_real
-            u = int(np.clip( u_pid + u_sm, -100, 100))
-            drone.send_rc_control(0, 0, u, 0)
-            
-            # Recopilación de datos
-            datos["error_alt"].append(error)
-            datos["alt_des"].append(alt_des)
-            datos["alt_real"].append(alt_real)
-            datos["tiempo"].append(valor)
-            datos["vel_real"].append(vel_real)
 
-            #data_time.append()
-            time.sleep(time_interval)
-            val_fin = time.perf_counter()
-            valor = val_fin - val_ini
+                    # Lectura de datos
+                    alt_real = drone.get_distance_tof()
+                    vel_real = drone.get_speed_z()
+
+                    # Datos adicionales
+                    dic_estados = drone.get_current_state()
+
+
+
+                    # Cálculo del error
+                    error = alt_des - alt_real
+                    error_vel = vel_des - vel_real
+
+                    # Superficie de deslizamiento
+                    s = error_vel + SM["lambda"] * error
+                    
+                    # Control PD+SMC de altura
+                    u_pid = PID["Kp"]*error + PID["Kd"]*error_vel
+                    u_sm = SM["rho"]*np.tanh(s/SM["epsilon"]) + SM["lambda"]*vel_real
+                    u = int(np.clip( u_pid + u_sm, -100, 100))
+                    drone.send_rc_control(0, 0, u, 0)
+                    
+                    # Recopilación de datos
+                    datos["error_alt"].append(error)
+                    datos["alt_des"].append(alt_des)
+                    datos["alt_real"].append(alt_real)
+                    datos["tiempo"].append(tiempo)
+                    datos["vel_des"].append(vel_des)
+                    datos["vel_real"].append(vel_real)
+                    datos["dic_estados"].append(dic_estados)
+
+                    #data_time.append()
+                    time.sleep(time_interval)
+                    val_fin = time.perf_counter()
+                    tiempo = val_fin - tiempo_ini
+                    
+                    print("El valor es ", tiempo)
+                    if tiempo >= 20:
+                        break
             
-            print("El valor es ", valor)
-            if valor >= 20:
-                break
-            
+        
         # Escribir valores en un archivo CSV
-        df = pd.DataFrame(datos) 
+        df = pd.DataFrame(datos)
         df.to_csv('datos.csv')
         print("Se acabo el vuelo y ya esta el archivo csv")
-        drone.land()
-
+        drone.land()        
+    
     except Exception as e:
         print('Error: ', e)
         drone.land()
@@ -111,18 +135,18 @@ def control_vehiculo():
 def trayectoria():
     
     # Inicialización del tiempo y primera lectura 
-    valor = 0
-    val_ini = time.perf_counter()
+    tiempo = 0
+    tiempo_ini = time.perf_counter()
     while True:
-        #tiempo.append(valor)
-        alt_des = x.item(0)*valor**5 + x.item(1)*valor**4 + x.item(2)*valor**3 
-        + x.item(3)*valor**2 + x.item(4)*valor + x.item(5)
+        #tiempo.append(tiempo)
+        alt_des = x.item(0)*tiempo**5 + x.item(1)*tiempo**4 + x.item(2)*tiempo**3 
+        + x.item(3)*tiempo**2 + x.item(4)*tiempo + x.item(5)
         #pos_des.append(alt_des)
         time.sleep(0.1)
         val_fin = time.perf_counter()
-        valor = val_fin - val_ini
+        tiempo = val_fin - tiempo_ini
         print(alt_des)
-        if valor >= 100:
+        if tiempo >= 100:
             tiempo_flag = True
             break
 
