@@ -57,16 +57,16 @@ def control_vehiculo():
         
     
         # Subir
-        for i in range(2):
+        for i in range(3):
             # Se toma el valor inicial del tiempo 
             tiempo = 0
             tiempo_ini = time.perf_counter()
 
             if i==0:
                 x = gen_trayectoria(20, 70, 180)
-            elif i==1:
+            elif i==2:
                 x = gen_trayectoria(20, 180, 70)
-            if i==0 or i==1:
+            if i==0 or i==2:
                 while True:
                     # Cálculo de la altura y velocidad deseada
                     alt_des = (x.item(0)*tiempo**5 + x.item(1)*tiempo**4 
@@ -76,15 +76,12 @@ def control_vehiculo():
                                 + 3*x.item(2)*tiempo**2 + 2*x.item(3)*tiempo 
                                 + x.item(4))
 
-
                     # Lectura de datos
                     alt_real = drone.get_distance_tof()
                     vel_real = drone.get_speed_z()
 
                     # Datos adicionales
                     dic_estados = drone.get_current_state()
-
-
 
                     # Cálculo del error
                     error = alt_des - alt_real
@@ -116,8 +113,9 @@ def control_vehiculo():
                     print("El valor es ", tiempo)
                     if tiempo >= 20:
                         break
-            
-        
+            #if i==1:
+            #    drone.send_rc_control(0, 0, u, 0)
+
         # Escribir valores en un archivo CSV
         df = pd.DataFrame(datos)
         df.to_csv('datos.csv')
