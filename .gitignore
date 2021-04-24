@@ -52,3 +52,5 @@ yolo.names
 yolov3_custom_train_4000.weights
 yolov3_custom_train.cfg
 datos.csv
+yolov3-tiny-obj_best.weights
+yolov3-tiny-obj.cfg

@@ -7,6 +7,7 @@ from djitellopy import tello
 import time
 import threading
 import pandas as pd
+from datetime import datetime
 
 # Variables globales
 
@@ -61,9 +62,9 @@ def control_vehiculo():
             tiempo_ini = time.perf_counter()
 
             if i==0:
-                x = gen_trayectoria(7, 70, 180)
+                x = gen_trayectoria(15, 70, 270)
             elif i==2:
-                x = gen_trayectoria(7, 180, 70)
+                x = gen_trayectoria(15, 270, 70)
             if i==0 or i==2:
                 while True:
                     # Cálculo de la altura y velocidad deseada
@@ -109,8 +110,8 @@ def control_vehiculo():
                     val_fin = time.perf_counter()
                     tiempo = val_fin - tiempo_ini
                     
-                    print("El valor es ", alt_real)
-                    if tiempo >= 7:
+                    #print("El valor es ", alt_real)
+                    if tiempo >= 15:
                         if i==0:
                             print("Acabo la trayectoria 1")
                         elif i==2:
@@ -118,13 +119,13 @@ def control_vehiculo():
                         break
             if i==1:
                 while True:
-                    drone.send_rc_control(0, 10, 0, 0)
+                    drone.send_rc_control(10, 0, 0, 0)
                     time.sleep(time_interval)
                     val_fin = time.perf_counter()
                     tiempo = val_fin - tiempo_ini
                     
                     #print("El valor es ", tiempo)
-                    if tiempo >= 3:
+                    if tiempo >= 9:
                         print("Acabo en la trayectoria 2")
                         break
 
@@ -162,7 +163,7 @@ def get_box_dimensions(outputs, height, width):
 			scores = detect[5:]
 			class_id = np.argmax(scores)
 			conf = scores[class_id]
-			if conf > 0.3:
+			if conf > 0.01:
 				center_x = int(detect[0] * width)
 				center_y = int(detect[1] * height)
 				w = int(detect[2] * width)
@@ -172,10 +173,11 @@ def get_box_dimensions(outputs, height, width):
 				boxes.append([x, y, w, h])
 				confs.append(float(conf))
 				class_ids.append(class_id)
+				print(boxes,confs,class_ids)
 	return boxes, confs, class_ids
 
 def draw_labels(boxes, confs, colors, class_ids, classes, img): 
-	indexes = cv2.dnn.NMSBoxes(boxes, confs, 0.5, 0.4)
+	indexes = cv2.dnn.NMSBoxes(boxes, confs, 0.2, 0.4)
 	font = cv2.FONT_HERSHEY_PLAIN
 	for i in range(len(boxes)):
 		if i in indexes:
@@ -196,15 +198,17 @@ if __name__ == '__main__':
     drone.connect()
     # Inicializa la transmición de video
     drone.streamon()
+    
     # Manejo de hilo de control
-    #control_veh = threading.Thread(target=control_vehiculo)
-    #control_veh.start()
+    control_veh = threading.Thread(target=control_vehiculo)
+    control_veh.start()
     
     #det_grietas = threading.Thread(target=deteccion_grietas)
     #det_grietas.start()
 
     # Se carga el modelo YOLO entrenado
-    model = cv2.dnn.readNet("yolov3_custom_train_4000.weights", "yolov3_custom_train.cfg")
+    #model = cv2.dnn.readNet("yolov3_custom_train_4000.weights", "yolov3_custom_train.cfg")
+    model = cv2.dnn.readNet("yolov3-tiny-obj_best.weights", "yolov3-tiny-obj.cfg")
     classes = []
     with open("yolo.names", "r") as f:
         classes = [line.strip() for line in f.readlines()]
@@ -241,9 +245,9 @@ if __name__ == '__main__':
         #time.sleep(time_interval)
         val_fin = time.perf_counter()
         tiempo = val_fin - tiempo_ini
-        print("El tiempo es:", tiempo)
+        #print("El tiempo es:", tiempo)
 
-        if tiempo>30 or (cv2.waitKey(1) & 0xFF == ord('q')):
+        if tiempo>50 or (cv2.waitKey(1) & 0xFF == ord('q')):
             print('Finalizo')
             #me.land()
             break
