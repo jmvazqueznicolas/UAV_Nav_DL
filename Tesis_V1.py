@@ -42,7 +42,7 @@ def control_vehiculo():
    
     try:
         # Ganacias del controlador
-        PID = {"Kp":1.2, "Kd":0.8, "Ki":0.1} 
+        PID = {"Kp":2.7, "Kd":1.6, "Ki":0.1} 
         SM = {"rho":0.8, "lambda":0.5, "epsilon":0.5}
 
         var =  0
@@ -50,8 +50,8 @@ def control_vehiculo():
         data_altura = []
         data_time = []
         datos = {"error_alt":[], "alt_des":[], "alt_real":[], 
-                 "vel_des":[],"vel_real":[], "tiempo":[], 
-                 "dic_estados":[]}
+                 "vel_des":[],"vel_real":[], "tiempo":[],} 
+                 #"dic_estados":[]}
 
         time_interval = 0.005
         
@@ -62,9 +62,9 @@ def control_vehiculo():
             tiempo_ini = time.perf_counter()
 
             if i==0:
-                x = gen_trayectoria(15, 70, 270)
+                x = gen_trayectoria(15, 70, 155)
             elif i==2:
-                x = gen_trayectoria(15, 270, 70)
+                x = gen_trayectoria(15, 155, 70)
             if i==0 or i==2:
                 while True:
                     # Cálculo de la altura y velocidad deseada
@@ -103,7 +103,7 @@ def control_vehiculo():
                     datos["tiempo"].append(tiempo)
                     datos["vel_des"].append(vel_des)
                     datos["vel_real"].append(vel_real)
-                    datos["dic_estados"].append(dic_estados)
+                    #datos["dic_estados"].append(dic_estados)
 
                     #data_time.append()
                     time.sleep(time_interval)
@@ -130,8 +130,11 @@ def control_vehiculo():
                         break
 
         # Escribir valores en un archivo CSV
+        fecha = datetime.now().strftime("%m:%d:%Y")
+        hora = datetime.now().strftime("%H:%M:%S")
+        hora_vuelo = fecha + '-' + hora
         df = pd.DataFrame(datos)
-        df.to_csv('datos.csv')
+        df.to_csv('datos-' + hora_vuelo + '.csv', header=False)
         print("Se acabo el vuelo y ya esta el archivo csv")
         drone.land()        
     
@@ -148,8 +151,9 @@ def deteccion_grietas():
         print('Grieta detectada')
         time.sleep(1)
 
-def detect_objects(img, net, outputLayers):			
-    blob = cv2.dnn.blobFromImage(img, scalefactor=0.00392, size=(320, 320), mean=(0, 0, 0), swapRB=True, crop=False)
+def detect_objects(img, net, outputLayers):
+    size=(416, 416)			
+    blob = cv2.dnn.blobFromImage(img, scalefactor=0.00392, size=size, mean=(0, 0, 0), swapRB=True, crop=False)
     net.setInput(blob)
     outputs = net.forward(outputLayers)
     return blob, outputs
@@ -177,7 +181,7 @@ def get_box_dimensions(outputs, height, width):
 	return boxes, confs, class_ids
 
 def draw_labels(boxes, confs, colors, class_ids, classes, img): 
-	indexes = cv2.dnn.NMSBoxes(boxes, confs, 0.2, 0.4)
+	indexes = cv2.dnn.NMSBoxes(boxes, confs, 0.1, 0.3)
 	font = cv2.FONT_HERSHEY_PLAIN
 	for i in range(len(boxes)):
 		if i in indexes:
@@ -196,6 +200,10 @@ if __name__ == '__main__':
     # Se instancia objeto para conectarse con el vehículo
     drone = tello.Tello()
     drone.connect()
+    
+    # Si la bateria 
+    print('El nivel de bateria es: ', drone.get_battery())
+
     # Inicializa la transmición de video
     drone.streamon()
     
@@ -215,6 +223,7 @@ if __name__ == '__main__':
     layers_names = model.getLayerNames()
     output_layers = [layers_names[i[0]-1] for i in model.getUnconnectedOutLayers()]
     colors = np.random.uniform(0, 255, size=(len(classes), 3))
+    colors = [[0, 255, 0]]
 	
     """
         cap = start_webcam()
@@ -235,7 +244,6 @@ if __name__ == '__main__':
     tiempo_ini = time.perf_counter()    
     
     while True:
-        #print(alt_des1)
         frame = drone.get_frame_read().frame
         height, width, channels = frame.shape
         blob, outputs = detect_objects(frame, model, output_layers)
