@@ -42,13 +42,13 @@ def control_vehiculo():
    
     try:
         # Ganacias del controlador
-        PID = {"Kp":2.7, "Kd":1.6, "Ki":0.1} 
+        PID = {"Kp":2.7, "Kd":1.8, "Ki":0.1} 
         SM = {"rho":0.8, "lambda":0.5, "epsilon":0.5}
 
         var =  0
-        data_error = []
-        data_altura = []
-        data_time = []
+        data_error = [ ]
+        data_altura = [ ]
+        data_time = [ ]
         datos = {"error_alt":[], "alt_des":[], "alt_real":[], 
                  "vel_des":[],"vel_real":[], "tiempo":[],} 
                  #"dic_estados":[]}
@@ -119,7 +119,7 @@ def control_vehiculo():
                         break
             if i==1:
                 while True:
-                    drone.send_rc_control(10, 0, 0, 0)
+                    drone.send_rc_control(0, 0, 0, 0)
                     time.sleep(time_interval)
                     val_fin = time.perf_counter()
                     tiempo = val_fin - tiempo_ini
@@ -152,10 +152,14 @@ def deteccion_grietas():
         time.sleep(1)
 
 def detect_objects(img, net, outputLayers):
-    size=(416, 416)			
+    tiempo_proc_ini = time.perf_counter()	
+    size=(416, 416)	
     blob = cv2.dnn.blobFromImage(img, scalefactor=0.00392, size=size, mean=(0, 0, 0), swapRB=True, crop=False)
     net.setInput(blob)
     outputs = net.forward(outputLayers)
+    tiempo_proc_fin = time.perf_counter()
+    tiempo_proc_tot = tiempo_proc_fin - tiempo_proc_ini
+    print("El tiempo es:", tiempo_proc_tot)
     return blob, outputs
 
 def get_box_dimensions(outputs, height, width):
@@ -208,8 +212,8 @@ if __name__ == '__main__':
     drone.streamon()
     
     # Manejo de hilo de control
-    control_veh = threading.Thread(target=control_vehiculo)
-    control_veh.start()
+    #control_veh = threading.Thread(target=control_vehiculo)
+    #control_veh.start()
     
     #det_grietas = threading.Thread(target=deteccion_grietas)
     #det_grietas.start()
@@ -246,6 +250,7 @@ if __name__ == '__main__':
     while True:
         frame = drone.get_frame_read().frame
         height, width, channels = frame.shape
+        print(height, width)
         blob, outputs = detect_objects(frame, model, output_layers)
         boxes, confs, class_ids = get_box_dimensions(outputs, height, width)
         draw_labels(boxes, confs, colors, class_ids, classes, frame)
@@ -253,7 +258,7 @@ if __name__ == '__main__':
         #time.sleep(time_interval)
         val_fin = time.perf_counter()
         tiempo = val_fin - tiempo_ini
-        #print("El tiempo es:", tiempo)
+        
 
         if tiempo>50 or (cv2.waitKey(1) & 0xFF == ord('q')):
             print('Finalizo')
